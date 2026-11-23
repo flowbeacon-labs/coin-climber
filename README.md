@@ -8,7 +8,7 @@ A vertical upward-scrolling HTML5 arcade game inspired by the original Coin Clim
 - **World 2 — Emerald Jungle:** Leafy Ascent, Temple Towers, Treetop Chase
 - **World 3 — Cosmic Clouds:** Star Trail, Meteor Heights, Galaxy Gateway
 
-Each world has its own animated scenery and enemy design. Collect coins, avoid hazards, pick up shields or hearts, reach checkpoints, and climb to the sky gate. Level unlocks and the high score are saved in the browser using localStorage.
+Each world has its own animated scenery and enemy design. Enemies now patrol across the entire width of the sky. The outer lanes are clearly marked danger zones: staying near an edge for about two seconds causes a hit after a warning. Move toward the center to reset the hazard timer. Collect coins, avoid hazards, pick up shields or hearts, reach checkpoints, and climb to the sky gate. Level unlocks and the high score are saved in the browser using localStorage.
 
 ## Controls
 
