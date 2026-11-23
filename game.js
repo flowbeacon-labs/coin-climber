@@ -10,9 +10,12 @@ const titles=['Morning Flight','Cloud Hopper','Stormy Summit','Leafy Ascent','Te
 const state={left:false,right:false,boost:false};const touches=new Map();let mode='menu',selected=0,unlocked=1,high=0,mute=false,audio=null;
 const SAVE='coin-climber-skybound-v2';
 try{let s=JSON.parse(localStorage.getItem(SAVE)||'{}');unlocked=Math.max(1,Math.min(COUNT,Number(s.unlocked)||1));high=Math.max(0,Number(s.high)||0);mute=!!s.mute;}catch{}
-let level=0,player={},coins=[],foes=[],pickups=[],particles=[],altitude=0,camera=0,score=0,lives=3,shield=0,invincible=0,checkpoint=0,frame=0,toastTimer=0;
+let level=0,player={},coins=[],foes=[],pickups=[],particles=[],altitude=0,camera=0,score=0,lives=3,shield=0,invincible=0,checkpoint=0,frame=0,toastTimer=0,edgeCharge=0,edgeSide=0;
 const rand=(n)=>{let x=Math.sin(n*137.238+level*59.727)*43758.5453;return x-Math.floor(x);};
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const EDGE_LIMIT=78,EDGE_WARNING=35,EDGE_DAMAGE=112;
+function enemyX(e){return W/2+Math.sin(frame*.016*e.speed+e.phase)*(W/2-34);}
+function edgeSideOf(x){return x<EDGE_LIMIT?-1:x>W-EDGE_LIMIT?1:0;}
 function persist(){try{localStorage.setItem(SAVE,JSON.stringify({high,unlocked,mute}));}catch{}}
 function beep(freq=500,seconds=.08,type='sine'){if(mute||mode!=='play')return;try{audio??=new(window.AudioContext||window.webkitAudioContext)();if(audio.state==='suspended')audio.resume();let o=audio.createOscillator(),gain=audio.createGain();o.type=type;o.frequency.value=freq;gain.gain.value=.055;gain.gain.exponentialRampToValueAtTime(.001,audio.currentTime+seconds);o.connect(gain);gain.connect(audio.destination);o.start();o.stop(audio.currentTime+seconds);}catch{}}
 function notify(message){$('toast').textContent=message;$('toast').style.opacity='1';toastTimer=75;}
@@ -22,17 +25,28 @@ function resetInputs(){touches.clear();Object.keys(state).forEach(k=>state[k]=fa
 function levelButtons(){const box=$('levels');box.replaceChildren();for(let i=0;i<COUNT;i++){const b=document.createElement('button');b.className='level'+(i===selected?' selected':'');b.disabled=i>=unlocked;b.textContent=(i<unlocked?'':'🔒 ')+(i+1)+' · '+worlds[Math.floor(i/3)].icon;const sub=document.createElement('small');sub.textContent=titles[i];b.append(sub);b.addEventListener('click',()=>{selected=i;levelButtons();$('play').textContent='PLAY '+titles[i].toUpperCase();});box.append(b);}}
 function overlay(head,desc,button='PLAY'){resetInputs();$('heading').textContent=head;$('description').textContent=desc;$('best').textContent=`Best coins: ${high}  •  Unlocked: ${unlocked}/${COUNT}`;$('play').textContent=button;$('overlay').hidden=false;$('overlay').style.display='grid';levelButtons();}
 function hideOverlay(){$('overlay').hidden=true;$('overlay').style.display='none';}
-function start(i){level=i;selected=i;score=0;lives=3;shield=0;invincible=55;altitude=0;checkpoint=0;camera=0;frame=0;particles=[];player={x:W/2,y:200,w:50,h:54,vx:0};coins=[];foes=[];pickups=[];const total=target();
+function start(i){level=i;selected=i;score=0;lives=3;shield=0;invincible=55;altitude=0;checkpoint=0;camera=0;frame=0;edgeCharge=0;edgeSide=0;particles=[];player={x:W/2,y:200,w:50,h:54,vx:0};coins=[];foes=[];pickups=[];const total=target();
 for(let y=210,k=0;y<total-110;y+=62,k++){let x=57+rand(k+9)*(W-114);coins.push({x,y,r:12,taken:false});if(k%7===2)coins.push({x:clamp(x+45,38,W-38),y:y+26,r:12,taken:false});}
 for(let y=490,k=0;y<total-200;y+=220,k++){foes.push({x:70+rand(k+88)*(W-140),y,w:47+level%3*2,h:45,base:0,phase:rand(k+23)*6.28,dead:false,speed:1+(level%3)*.18});}
 for(let y=800,k=0;y<total-200;y+=850,k++)pickups.push({x:70+rand(k+144)*(W-140),y,type:k%2===0?'shield':'heart',taken:false});
 mode='play';hideOverlay();updateHud();}
-function hurt(){if(invincible>0||mode!=='play')return;if(shield>0){shield=0;invincible=65;beep(220,.16,'triangle');notify('🛡 SHIELD SAVED YOU!');return;}lives--;beep(150,.24,'sawtooth');if(lives===0){mode='over';high=Math.max(high,score);persist();overlay('Game Over 💥',`You collected ${score} coins in ${titles[level]}. Try again!`,'TRY AGAIN');return;}altitude=checkpoint;camera=checkpoint;player.x=W/2;invincible=110;notify('♥ TRY AGAIN FROM CHECKPOINT');}
+function hurt(){if(invincible>0||mode!=='play')return;if(shield>0){shield=0;edgeCharge=0;edgeSide=0;player.x=clamp(player.x,EDGE_LIMIT+35,W-EDGE_LIMIT-35);invincible=65;beep(220,.16,'triangle');notify('🛡 SHIELD SAVED YOU!');return;}lives--;beep(150,.24,'sawtooth');if(lives===0){mode='over';high=Math.max(high,score);persist();overlay('Game Over 💥',`You collected ${score} coins in ${titles[level]}. Try again!`,'TRY AGAIN');return;}altitude=checkpoint;camera=checkpoint;player.x=W/2;edgeCharge=0;edgeSide=0;invincible=110;notify('♥ TRY AGAIN FROM CHECKPOINT');}
 function win(){mode='won';high=Math.max(high,score);unlocked=Math.max(unlocked,Math.min(COUNT,level+2));persist();selected=Math.min(COUNT-1,level+1);beep(800,.24,'triangle');overlay(level===8?'🏆 SKY CHAMPION!':'🌟 LEVEL COMPLETE!',`You collected ${score} coins and conquered ${titles[level]}!`,level===8?'PLAY AGAIN':'NEXT LEVEL');}
-function update(){if(mode!=='play')return;frame++;const dx=(state.right?1:0)-(state.left?1:0);player.vx=dx*5.6;player.x=clamp(player.x+player.vx,27,W-27);let speed=(state.boost?5.2:2.85)+Math.floor(level/3)*.3+level%3*.15;altitude=Math.min(target()+20,altitude+speed);camera=altitude;if(invincible>0)invincible--;if(toastTimer>0&&--toastTimer===0)$('toast').style.opacity='0';if(altitude>=target()){win();return;}
+function update(){if(mode!=='play')return;frame++;const dx=(state.right?1:0)-(state.left?1:0);player.vx=dx*5.6;player.x=clamp(player.x+player.vx,27,W-27);let speed=(state.boost?5.2:2.85)+Math.floor(level/3)*.3+level%3*.15;altitude=Math.min(target()+20,altitude+speed);camera=altitude;if(invincible>0)invincible--;
+const side=altitude<240?0:edgeSideOf(player.x);
+if(!side){edgeCharge=0;edgeSide=0;}else{
+  if(side!==edgeSide){edgeCharge=0;edgeSide=side;}
+  edgeCharge++;
+  if(edgeCharge===EDGE_WARNING)notify('⚠ EDGE DANGER — MOVE TOWARD CENTER!');
+  if(edgeCharge>=EDGE_DAMAGE){
+    edgeCharge=0;player.x=side<0?EDGE_LIMIT+35:W-EDGE_LIMIT-35;
+    if(invincible===0)hurt();
+    else notify('⚠ AVOID THE EDGE!');
+  }
+}if(toastTimer>0&&--toastTimer===0)$('toast').style.opacity='0';if(altitude>=target()){win();return;}
 for(let c of coins){if(c.taken||Math.abs(c.y-altitude)>100)continue;if(Math.abs(c.x-player.x)<35&&Math.abs(c.y-altitude)<37){c.taken=true;score++;beep(660+score%5*70,.055);particles.push({x:c.x,y:c.y,age:0});if(score>high){high=score;if(score%10===0)persist();}}}
 for(let p of pickups){if(p.taken||Math.abs(p.y-altitude)>90)continue;if(Math.abs(p.x-player.x)<40&&Math.abs(p.y-altitude)<44){p.taken=true;if(p.type==='shield'){shield=1;notify('🛡 SHIELD ACTIVATED!');}else{lives=Math.min(5,lives+1);notify('♥ EXTRA HEART!');}beep(920,.16,'triangle');}}
-for(let e of foes){if(e.dead||Math.abs(e.y-altitude)>100)continue;const xpos=e.x+Math.sin(frame*.028*e.speed+e.phase)*36;if(Math.abs(xpos-player.x)<(e.w+player.w)*.42&&Math.abs(e.y-altitude)<42){hurt();if(mode!=='play')break;}}
+for(let e of foes){if(e.dead||Math.abs(e.y-altitude)>100)continue;const xpos=enemyX(e);if(Math.abs(xpos-player.x)<(e.w+player.w)*.42&&Math.abs(e.y-altitude)<42){hurt();if(mode!=='play')break;}}
 if(altitude>=checkpoint+800){checkpoint=Math.floor(altitude/800)*800;notify('🚩 CHECKPOINT!');beep(450,.12);}
 for(let p of particles)p.age++;particles=particles.filter(p=>p.age<22);updateHud();}
 function poly(points,fill){g.fillStyle=fill;g.beginPath();points.forEach(([x,y],i)=>i?g.lineTo(x,y):g.moveTo(x,y));g.closePath();g.fill();}
@@ -42,8 +56,21 @@ function drawBg(){const w=Math.floor(level/3),t=worlds[w];let grad=g.createLinea
 if(w===0){for(let i=0;i<20;i++){let y=((i*170+camera*.31)%1120)-100,x=rand(i+10)*W;g.fillStyle='#f4fbffbb';for(let k=0;k<3;k++)circle(x+k*22,y+(k%2)*-11,27,'#ffffffc7');}for(let i=0;i<9;i++){let y=((i*270+camera*.17)%1300)-200;poly([[0,y+80],[90,y],[180,y+90]],'#6fb6c588');poly([[320,y+95],[440,y-15],[540,y+70]],'#91d6df77');}}
 else if(w===1){for(let i=0;i<26;i++){let y=((i*145+camera*.35)%1150)-130,x=rand(i+40)*W;g.fillStyle='#175d4e';g.fillRect(x-5,y,10,180);circle(x,y,35,t.detail);circle(x-28,y+18,22,'#339b70');}for(let i=0;i<15;i++){let y=((i*170+camera*.53)%1150)-90;poly([[0,y+100],[50,y+38],[100,y+120]],'#1d6a689e');poly([[450,y+110],[500,y],[540,y+115]],'#277d7199');}}
 else{for(let i=0;i<95;i++){let y=((i*137+camera*(.2+rand(i)*.5))%1100)-100,x=rand(i+12)*W;circle(x,y,rand(i+32)*2.2+1,'#f3efffd9');}for(let i=0;i<12;i++){let y=((i*258+camera*.28)%1200)-140,x=rand(i+200)*W;circle(x,y,20+rand(i)*27,'#a18dfe65');circle(x-7,y-7,7,'#d5c8ff55');}g.strokeStyle='#91b5ff29';g.lineWidth=8;for(let i=0;i<6;i++){let y=((i*320+camera*.3)%1200)-150;g.beginPath();g.moveTo(-20,y);g.quadraticCurveTo(W/2,y-100,W+20,y+30);g.stroke();}}}
+function drawEdgeDanger(){
+ const active=edgeCharge>=EDGE_WARNING,progress=Math.min(1,edgeCharge/EDGE_DAMAGE);
+ const blink=active&&Math.floor(frame/9)%2===0;
+ g.fillStyle=blink?'#ff354b88':'#ff405444';
+ g.fillRect(0,0,EDGE_LIMIT,H);g.fillRect(W-EDGE_LIMIT,0,EDGE_LIMIT,H);
+ g.fillStyle='#ffddd8';g.font='bold 15px system-ui';g.textAlign='center';
+ g.save();g.translate(21,H*.52);g.rotate(-Math.PI/2);g.fillText('⚡ DANGER EDGE ⚡',0,0);g.restore();
+ g.save();g.translate(W-21,H*.52);g.rotate(Math.PI/2);g.fillText('⚡ DANGER EDGE ⚡',0,0);g.restore();
+ if(edgeSide){const x=edgeSide<0?8:W-17;
+   g.fillStyle='#ffef76';g.fillRect(x,H-260,9,190*progress);
+   if(active){g.fillStyle='#fff';g.font='bold 20px system-ui';g.textAlign='center';g.fillText('MOVE TO THE CENTER!',W/2,120);}
+ }
+}
 function drawCoins(){for(let c of coins){if(c.taken)continue;let y=worldY(c.y);if(y<-35||y>H+35)continue;circle(c.x,y,14,'#ca841a');circle(c.x-2,y-2,11,'#ffdd58');circle(c.x-5,y-5,4,'#fff2aa');g.strokeStyle='#ffefab';g.lineWidth=2;g.beginPath();g.arc(c.x,y,8,-1.2,1.1);g.stroke();}}
-function drawEnemies(){for(let e of foes){if(e.dead)continue;let y=worldY(e.y),x=e.x+Math.sin(frame*.028*e.speed+e.phase)*36;if(y<-80||y>H+80)continue;let w=Math.floor(level/3);if(w===0){poly([[x-27,y],[x-47,y-21],[x-20,y-13],[x,y-1]],'#ffe4ed');poly([[x+27,y],[x+47,y-21],[x+20,y-13],[x,y-1]],'#ffe4ed');circle(x,y,22,'#ef5974');circle(x-7,y-6,4,'#fff');circle(x+8,y-6,4,'#fff');circle(x-6,y-5,2,'#262c50');circle(x+9,y-5,2,'#262c50');}
+function drawEnemies(){for(let e of foes){if(e.dead)continue;let y=worldY(e.y),x=enemyX(e);if(y<-80||y>H+80)continue;let w=Math.floor(level/3);if(w===0){poly([[x-27,y],[x-47,y-21],[x-20,y-13],[x,y-1]],'#ffe4ed');poly([[x+27,y],[x+47,y-21],[x+20,y-13],[x,y-1]],'#ffe4ed');circle(x,y,22,'#ef5974');circle(x-7,y-6,4,'#fff');circle(x+8,y-6,4,'#fff');circle(x-6,y-5,2,'#262c50');circle(x+9,y-5,2,'#262c50');}
 else if(w===1){circle(x,y,23,'#8e4bcc');for(let k=0;k<4;k++){let th=k*Math.PI/2+frame*.05;circle(x+Math.cos(th)*25,y+Math.sin(th)*25,7,'#b268ed');}circle(x-7,y-3,5,'#fff');circle(x+9,y-3,5,'#fff');circle(x-6,y-3,2,'#261541');circle(x+10,y-3,2,'#261541');}
 else{poly([[x-28,y],[x,y-27],[x+28,y],[x,y+27]],'#fe79aa');circle(x,y,15,'#eb4e87');circle(x-5,y-4,3,'white');circle(x+8,y-4,3,'white');circle(x-4,y-3,1.5,'#1e1450');circle(x+9,y-3,1.5,'#1e1450');} }
 }
@@ -51,7 +78,7 @@ function drawPickups(){for(let p of pickups){if(p.taken)continue;let y=worldY(p.
 function drawPlayer(){let x=player.x,y=H-200;if(invincible>0&&frame%10<5)return;g.save();g.translate(x,y);if(shield){circle(0,0,45,'#79f5ff43');g.strokeStyle='#91ffff';g.lineWidth=4;g.beginPath();g.arc(0,0,44,0,Math.PI*2);g.stroke();}poly([[-18,20],[-27,42],[0,29],[27,42],[18,20]],'#fd8b36');poly([[-16,-10],[-31,18],[-18,12]],'#ffe493');poly([[16,-10],[31,18],[18,12]],'#ffe493');circle(0,4,25,'#f7b64c');poly([[-22,3],[0,-38],[22,3]],'#ffdb63');circle(-8,3,5,'white');circle(9,3,5,'white');circle(-7,3,2.5,'#263352');circle(10,3,2.5,'#263352');g.fillStyle='#fff5';g.fillRect(-4,13,8,4);poly([[-12,34],[0,42],[12,34]],'#ffdf6a');g.restore();}
 function drawGoal(){let y=worldY(target());if(y<-100||y>H+100)return;g.fillStyle='#ffe77a';g.fillRect(25,y-11,W-50,22);g.font='bold 25px system-ui';g.fillStyle='#14204f';g.textAlign='center';g.fillText('★  SKY GATE  ★',W/2,y-23);}
 function drawParticles(){for(let p of particles){g.globalAlpha=1-p.age/22;g.font='bold 24px system-ui';g.fillStyle='#ffea66';g.textAlign='center';g.fillText('+1',p.x,worldY(p.y)-p.age*2);}g.globalAlpha=1;}
-function draw(){drawBg();if(mode==='menu')camera+=.4;drawCoins();drawPickups();drawEnemies();drawGoal();if(mode!=='menu')drawPlayer();drawParticles();}
+function draw(){drawBg();drawEdgeDanger();if(mode==='menu')camera+=.4;drawCoins();drawPickups();drawEnemies();drawGoal();if(mode!=='menu')drawPlayer();drawParticles();}
 let last=0,carry=0;function loop(t){let delta=Math.min(80,t-last||16.666);last=t;carry+=delta;while(carry>=16.666){update();carry-=16.666;}draw();requestAnimationFrame(loop);}requestAnimationFrame(loop);
 function recompute(){Object.keys(state).forEach(k=>state[k]=false);for(let key of touches.values())state[key]=true;document.querySelectorAll('[data-control]').forEach(b=>b.classList.toggle('pressed',state[b.dataset.control]));}
 function unpress(id){touches.delete(id);recompute();}
@@ -60,5 +87,5 @@ window.addEventListener('pointerup',e=>unpress(e.pointerId));window.addEventList
 const keymap={ArrowLeft:'left',KeyA:'left',ArrowRight:'right',KeyD:'right',Space:'boost',ArrowUp:'boost',KeyW:'boost'};document.addEventListener('keydown',e=>{if(keymap[e.code]){e.preventDefault();state[keymap[e.code]]=true;}if(e.code==='KeyP'&&!e.repeat)pause();});document.addEventListener('keyup',e=>{if(keymap[e.code]){e.preventDefault();state[keymap[e.code]]=false;}});
 function pause(){if(mode==='play'){mode='paused';overlay('Paused ⏸','Your climb is safe. Resume to keep collecting coins.','RESUME');}else if(mode==='paused'){mode='play';hideOverlay();}}
 $('pause').addEventListener('click',pause);$('play').addEventListener('click',()=>{if(mode==='paused'){mode='play';hideOverlay();return;}start(selected);});$('sound').textContent=mute?'🔇':'🔊';$('sound').addEventListener('click',()=>{mute=!mute;$('sound').textContent=mute?'🔇':'🔊';persist();});$('fullscreen').addEventListener('click',async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else if(document.documentElement.requestFullscreen)await document.documentElement.requestFullscreen();else notify('On iPhone: Share → Add to Home Screen');}catch{notify('Try Add to Home Screen for fullscreen');}});
-overlay('Coin Climber ✨','Rise through Sunrise Skies, Emerald Jungle and Cosmic Clouds. Nine vertical levels with unique enemies, collectible coins, shields and checkpoints.','PLAY LEVEL 1');updateHud();
+overlay('Coin Climber ✨','Rise through nine vertical levels. Enemies sweep across the full sky, and the glowing side edges become dangerous if you linger. Collect coins, shields and checkpoints!','PLAY LEVEL 1');updateHud();
 })();
