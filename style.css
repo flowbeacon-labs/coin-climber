@@ -14,3 +14,12 @@
 #controls>[data-control="boost"]{grid-column:2;justify-self:center}
 #controls>[data-control="right"]{grid-column:3;justify-self:end}
 @media(max-width:380px){#controls{left:max(8px,env(safe-area-inset-left));right:max(8px,env(safe-area-inset-right));gap:4px!important}#controls>.control:not(.boost){width:56px;height:60px}#controls>.boost{width:94px;font-size:14px}}
+
+/* Milestone selection: collapsible groups of three stages. */
+#levels.milestone-list{display:block;max-height:min(36dvh,350px);overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;padding:2px 3px}
+.milestone{margin:6px 0;border:1px solid #95bfde;background:#ffffffdb;border-radius:12px;overflow:hidden;text-align:left}
+.milestone summary{list-style:disclosure-closed;cursor:pointer;padding:9px 10px;font-size:13px;font-weight:900;color:#204f83;touch-action:manipulation}
+.milestone[open] summary{background:#d6eeff;list-style:disclosure-open}
+.milestone-stages{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;padding:6px}
+.milestone-stages .level{min-width:0;min-height:55px;font-size:12px;overflow-wrap:anywhere}
+.milestone-stages .level small{font-size:9px}
