@@ -5,3 +5,12 @@
 #controls [data-control="left"]{grid-column:1;grid-row:1;justify-self:start}
 #controls [data-control="boost"]{grid-column:2;grid-row:1;justify-self:center}
 #controls [data-control="right"]{grid-column:3;grid-row:1;justify-self:end}
+
+/* Mobile controls final layout: explicit siblings, no nested flex wrapper.
+   Flex distributes space across the available viewport and keeps boost centered. */
+#controls{display:grid!important;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr)!important;justify-content:initial!important;align-items:end!important;gap:8px!important}
+#controls>.control{position:relative;grid-row:1;min-width:0}
+#controls>[data-control="left"]{grid-column:1;justify-self:start}
+#controls>[data-control="boost"]{grid-column:2;justify-self:center}
+#controls>[data-control="right"]{grid-column:3;justify-self:end}
+@media(max-width:380px){#controls{left:max(8px,env(safe-area-inset-left));right:max(8px,env(safe-area-inset-right));gap:4px!important}#controls>.control:not(.boost){width:56px;height:60px}#controls>.boost{width:94px;font-size:14px}}
